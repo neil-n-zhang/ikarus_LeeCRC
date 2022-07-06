@@ -1,0 +1,93 @@
+---
+title: "Read raw reads and generate Seurat object"
+output: html_notebook
+---
+
+```{r message=FALSE}
+library(Seurat,quietly = T)
+library(tidyverse)
+library(patchwork)
+```
+
+```{r}
+cell_annotation_KUL3paper=read.delim("./data/KUL3/GSE144735_processed_KUL3_CRC_10X_annotation.txt")
+
+# read.delim substitue the "-" in rowname to ".", use read_delim instead
+UMI_raw_KUL3=read_delim("./data/KUL3/GSE144735_processed_KUL3_CRC_10X_raw_UMI_count_matrix.txt")
+```
+
+```{r}
+UMI_raw_KUL3[1:4,1:4]
+```
+
+```{r}
+# convert UMI_raw_KUL3 into data.frame so that we can assign row names
+UMI_raw_KUL3=as.data.frame(UMI_raw_KUL3)
+rownames(UMI_raw_KUL3)=UMI_raw_KUL3[,1]
+UMI_raw_KUL3[,1]=NULL
+```
+
+```{r}
+UMI_raw_KUL3[1:4,1:4]
+```
+
+
+```{r}
+KUL3_seurat_raw=CreateSeuratObject(UMI_raw_KUL3)
+```
+
+```{r}
+rownames(cell_annotation_KUL3paper)=cell_annotation_KUL3paper$Index
+KUL3_seurat_raw=AddMetaData(KUL3_seurat_raw,cell_annotation_KUL3paper)
+```
+
+```{r}
+KUL3_seurat_raw@meta.data[1:4,]
+```
+
+```{r}
+table(KUL3_seurat_raw$orig.ident)
+```
+
+
+```{r}
+preprocess_seuratobj=function(seuratobj){
+  
+  seuratobj <- NormalizeData(seuratobj, verbose = FALSE)
+  seuratobj <- FindVariableFeatures(seuratobj, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
+  seuratobj <- ScaleData(seuratobj, verbose = FALSE)
+  seuratobj <- RunPCA(seuratobj, npcs = 30, verbose = FALSE)
+  return(seuratobj)
+}
+```
+
+```{r}
+unsupervised_cluster=function(seuratobj){
+  
+  seuratobj <- FindNeighbors(seuratobj, dims = 1:10, verbose = FALSE)
+  seuratobj <- FindClusters(seuratobj, resolution = 0.4, verbose = FALSE)
+  seuratobj <- RunUMAP(seuratobj, dims = 1:10, verbose = FALSE)
+  return(seuratobj)
+}
+```
+
+```{r}
+KUL21_N=subset(KUL3_seurat_raw,orig.ident=='KUL21-N')
+KUL21_T=subset(KUL3_seurat_raw,orig.ident=='KUL21-T')
+```
+
+```{r}
+KUL21_N=preprocess_seuratobj(KUL21_N)
+KUL21_N=unsupervised_cluster(KUL21_N)
+
+KUL21_T=preprocess_seuratobj(KUL21_T)
+KUL21_T=unsupervised_cluster(KUL21_T)
+```
+
+```{r}
+p1=DimPlot(KUL21_N, reduction = "umap",group.by  = "Cell_type",label = T)+ NoLegend()
+p2=DimPlot(KUL21_T, reduction = "umap",group.by  = "Cell_type",label = T) + NoLegend()
+
+p1+p2
+```
+
